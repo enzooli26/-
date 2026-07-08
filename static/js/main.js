@@ -1,6 +1,3 @@
-/**
- * 社脉通 - 社会关系网络穿透分析系统 - 前端脚本
- */
 
 const API = {
     async get(url) {
@@ -378,12 +375,135 @@ async function saveDuty() {
 
 // ── 网络可视化 ──
 let networkChart = null;
+let allNetworkData = null;  // 缓存完整数据
 
 async function loadNetwork() {
-    const res = await API.get('/api/network');
     const container = $('#network-container');
-    if (!window.echarts) { container.innerHTML = '<div class="empty-state">正在加载 ECharts...</div>'; return; }
+    if (!window.echarts) {
+        container.innerHTML = '<div class="empty-state">正在加载 ECharts...</div>';
+        return;
+    }
 
+    // 加载完整数据
+    const res = await API.get('/api/network');
+    allNetworkData = res;
+
+    // ✅ 填充核心人员下拉列表
+    populateCorePersonSelect(res.nodes);
+
+    // 应用筛选
+    applyNetworkFilter();
+}
+
+// ✅ 填充核心人员下拉框
+function populateCorePersonSelect(nodes) {
+    const select = $('#core-person-select');
+    select.innerHTML = '<option value="">-- 请选择 --</option>';
+    nodes.forEach(n => {
+        select.innerHTML += `<option value="${n.id}">${n.name}</option>`;
+    });
+}
+
+// ✅ 应用网络筛选
+async function applyNetworkFilter() {
+    if (!allNetworkData || !window.echarts) return;
+
+    const filterType = $('#network-filter-type').value;
+    const corePersonId = $('#core-person-select').value;
+    const maxDepth = parseInt($('#core-depth').value) || 2;
+
+    // 显示/隐藏核心人员控制组
+    $('#core-person-group').style.display = 
+        (filterType === 'selected' || filterType === 'core') ? 'flex' : 'none';
+
+    let filteredNodes = [];
+    let filteredLinks = [];
+
+    switch (filterType) {
+        case 'all':
+            filteredNodes = allNetworkData.nodes;
+            filteredLinks = allNetworkData.links;
+            break;
+
+        case 'selected':
+            // 只显示选中的核心人员（无关系）
+            if (corePersonId) {
+                const node = allNetworkData.nodes.find(n => n.id === parseInt(corePersonId));
+                if (node) filteredNodes = [node];
+            }
+            filteredLinks = [];
+            break;
+
+        case 'core':
+            // 显示核心人员及其指定层数的关系
+            if (corePersonId) {
+                const result = filterNetworkByCore(
+                    parseInt(corePersonId), 
+                    maxDepth,
+                    allNetworkData.nodes,
+                    allNetworkData.links
+                );
+                filteredNodes = result.nodes;
+                filteredLinks = result.links;
+            } else {
+                // 未选择时显示全部
+                filteredNodes = allNetworkData.nodes;
+                filteredLinks = allNetworkData.links;
+            }
+            break;
+    }
+
+    renderNetwork(filteredNodes, filteredLinks);
+}
+
+function filterNetworkByCore(coreId, maxDepth, allNodes, allLinks) {
+    // 构建邻接表
+    const adj = {};
+    allLinks.forEach(link => {
+        if (!adj[link.source]) adj[link.source] = [];
+        if (!adj[link.target]) adj[link.target] = [];
+        adj[link.source].push(link.target);
+        adj[link.target].push(link.source);
+    });
+
+    // BFS 收集可达节点
+    const visited = new Set();
+    const queue = [{ id: coreId, depth: 0 }];
+    visited.add(coreId);
+
+    while (queue.length > 0) {
+        const { id, depth } = queue.shift();
+        if (depth >= maxDepth) continue;
+
+        const neighbors = adj[id] || [];
+        for (const neighbor of neighbors) {
+            if (!visited.has(neighbor)) {
+                visited.add(neighbor);
+                queue.push({ id: neighbor, depth: depth + 1 });
+            }
+        }
+    }
+
+    // 筛选节点
+    const filteredNodes = allNodes.filter(n => visited.has(n.id));
+
+    // 筛选边（两端都在节点集中）
+    const nodeSet = visited;
+    const filteredLinks = allLinks.filter(link => 
+        nodeSet.has(link.source) && nodeSet.has(link.target)
+    );
+    console.log(filteredLinks);
+    console.log(filteredNodes);
+    return { nodes: filteredNodes, links: filteredLinks };
+}
+
+// ✅ 渲染网络图
+function renderNetwork(nodes, links) {
+    console.log(' renderNetwork 开始执行');
+    console.log('   nodes:', nodes);
+    console.log('   links:', links);
+    console.log('   typeof echarts:', typeof echarts);
+    
     if (!networkChart) {
         networkChart = echarts.init($('#network-container'));
         window.addEventListener('resize', () => networkChart && networkChart.resize());
@@ -395,29 +515,67 @@ async function loadNetwork() {
         { name: '女性', itemStyle: { color: '#E91E63' } }
     ];
 
+    // 如果没有数据，显示提示
+    if (nodes.length === 0) {
+        networkChart.setOption({
+            title: { text: '请选择核心人员', left: 'center', top: 'center' }
+        });
+        return;
+    }
+
     const option = {
-        title: { text: '社会关系网络图', left: 'center', top: 10, textStyle: { fontSize: 16 } },
+        title: { 
+            text: `关系网络图（${nodes.length} 个节点，${links.length} 条关系）`, 
+            left: 'center', 
+            top: 10,
+            textStyle: { fontSize: 14 }
+        },
         tooltip: {
             trigger: 'item',
             formatter: function(p) {
-                if (p.dataType === 'edge') return p.data.label || '关系';
+                if (p.dataType === 'edge') {
+                    return `${p.data.label || '关系'}`;
+                }
                 return `${p.name}<br/>性别: ${categoriesMap[p.data.category === 0 ? '男' : '女']}`;
             }
         },
         legend: [{ data: categories.map(c => c.name), bottom: 10, left: 'center' }],
         series: [{
-            type: 'graph', layout: 'force', roam: true, draggable: true,
-            force: { repulsion: 300, edgeLength: [120, 250], friction: 0.15 },
+            type: 'graph',
+            layout: 'force',
+            nodesId: 'id',
+            roam: true,
+            draggable: true,
+            force: {
+                repulsion: 300,
+                edgeLength: [120, 250],
+                friction: 0.15
+            },
             categories: categories,
-            data: res.nodes.map(n => ({
-                id: n.id, name: n.name, category: n.category,
-                symbolSize: 40, label: { show: true, fontSize: 12 }
+            data: nodes.map(n => ({
+                id: String(n.id),
+                name: n.name,
+                category: n.category,
+                symbolSize: 40,
+                label: { show: true, fontSize: 12 }
             })),
-            edges: res.links.map(l => ({ source: l.source, target: l.target, label: { show: true, formatter: l.label } })),
-            lineStyle: { color: '#bbb', curveness: 0.15, width: 1.5 },
-            emphasis: { focus: 'adjacency', lineStyle: { width: 3 } }
+            edges: links.map(l => ({
+                source: String(l.source),
+                target: String(l.target),
+                label: { show: true, formatter: l.label }
+            })),
+            lineStyle: {
+                color: '#bbb',
+                curveness: 0.15,
+                width: 1.5
+            },
+            emphasis: {
+                focus: 'adjacency',
+                lineStyle: { width: 3 }
+            }
         }]
     };
+
     networkChart.setOption(option, true);
 }
 
