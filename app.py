@@ -20,12 +20,15 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
+
 # ── 应用初始化 ──────────────────────────────────────────────
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'social_network.db')
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 app.config['SECRET_KEY'] = 'social-network-secret-key-2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -33,6 +36,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'index'
+
 
 # ── 数据库模型 ──────────────────────────────────────────────
 

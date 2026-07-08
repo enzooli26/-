@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>社脉通 - 社会关系网络穿透分析系统</title>
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="../static/css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<!-- <script src = '../static/js/main.js'></script> -->
 </head>
 <body>
 
@@ -164,7 +165,31 @@
 
         <!-- 网络可视化 -->
         <div id="panel-network" class="panel">
-            <div id="network-container" class="network-container"></div>
+           
+            <div class="network-toolbar">
+        <div class="filter-group">
+            <label for="network-filter-type">显示模式：</label>
+            <select id="network-filter-type" onchange="applyNetworkFilter()">
+                <option value="all">显示全部人员</option>
+                <option value="selected">仅显示选中人员</option>
+                <option value="core">核心人员及其关系</option>
+            </select>
+        </div>
+        <div class="filter-group" id="core-person-group" style="display:none;">
+            <label for="core-person-select">核心人员：</label>
+            <select id="core-person-select" onchange="applyNetworkFilter()">
+                <option value="">-- 请选择 --</option>
+            </select>
+            <label for="core-depth" style="margin-left:12px;">关系层数：</label>
+            <select id="core-depth" onchange="applyNetworkFilter()">
+                <option value="1">1 层</option>
+                <option value="2" selected>2 层</option>
+                <option value="3">3 层</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="applyNetworkFilter()">🔄 刷新</button>
+        </div>
+    </div>
+    <div id="network-container" class="network-container"></div>
         </div>
 
         <!-- 穿透分析 -->
@@ -322,6 +347,6 @@
     </div>
 </div>
 
-<script src="/static/js/main.js"></script>
+<script src="../static/js/main.js"></script>
 </body>
 </html>
